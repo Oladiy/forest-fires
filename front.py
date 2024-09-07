@@ -9,14 +9,11 @@ import torch.nn.functional as F
 
 PATH_WEIGHTS = "models/best_model.pth"
 
-
 def load_image(image_file):
     image = Image.open(image_file).convert("RGB")
     transform = transforms.Compose([
         transforms.Resize((256, 256)),
         transforms.ToTensor(),
-        # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-
     ])
     image = transform(image).unsqueeze(0)
     return image, image_file
@@ -31,18 +28,17 @@ def overlay_mask(image, mask, alpha=0.5):
     
     return overlay
 
-def infer_and_plot(image, model, alpha):
-
+def infer_and_plot(image, model, alpha, confidence_threshold):
     with torch.no_grad():
         output = model(image)
-
-    mask = output.argmax(dim=1)
-
-    orig_image = Image.fromarray((image.squeeze().permute(1, 2, 0).cpu().numpy()*255.0).astype(np.uint8))
-
-    mask_result = np.stack([mask, mask, mask], axis=-1)
-    print(mask_result.shape)
-    mask_result = Image.fromarray((mask_result.squeeze()*255.0).astype(np.uint8))
+    
+    probabilities = torch.sigmoid(output)
+    mask = (probabilities > confidence_threshold).float().squeeze(0)
+    
+    orig_image = Image.fromarray((image.squeeze().permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8))
+    
+    mask_result = Image.fromarray((mask.cpu().numpy().squeeze() * 255.0).astype(np.uint8))
+    
     result_image = overlay_mask(orig_image, mask, alpha)
 
     return result_image, mask_result
@@ -50,6 +46,7 @@ def infer_and_plot(image, model, alpha):
 st.title("Детекция пожаров")
 
 alpha = st.slider("Прозрачность маски", 0.0, 1.0, 0.5)
+confidence_threshold = st.slider("Порог модели", 0.0, 1.0, 0.5)
 
 @st.cache_resource
 def load_model():
@@ -68,18 +65,14 @@ def load_model():
     return model
 
 model = load_model()
-st.success("Модель загружена!")
+st.success("Модель загружена")
 
 image_file = st.file_uploader("Загрузите изображение", type=["jpg", "jpeg", "png"])
 if image_file:
     image, orig_image_file = load_image(image_file)
 
-    result_image, mask_result = infer_and_plot(image, model, alpha)
+    result_image, mask_result = infer_and_plot(image, model, alpha, confidence_threshold)
 
-    st.image(mask_result)
-    
+    st.image(mask_result, caption="Маска", use_column_width=True)
     st.image(result_image, caption="Overlay", use_column_width=True)
-
-
-
-    st.image(Image.fromarray((image.squeeze().permute(1, 2, 0).cpu().numpy()*255.0).astype(np.uint8)), caption="Оригинальное изображение", use_column_width=True)
+    st.image(Image.fromarray((image.squeeze().permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)), caption="Оригинальное изображение", use_column_width=True)
