@@ -7,9 +7,6 @@ import rasterio
 
 from api import call_api
 
-headers = ['time', 'Тсред', 'Тмин', 'Тмакс', 'Осадки всего', 'Направление ветра', 'Скорость ветра', 'Порывы ветра',
-           'Давление на уровне моря']
-
 
 def find_tiff_file(directory):
     """Находит первый .tiff файл в указанной директории с помощью регулярного выражения"""
@@ -25,7 +22,6 @@ def find_csv_file(directory):
     csv_pattern = re.compile(r'.*\.csv$')
     for file_name in os.listdir(directory):
         if csv_pattern.match(file_name):
-            print("file_name = ", file_name)
             return file_name
     raise FileNotFoundError("csv файл не найден в указанной директории")
 
@@ -39,10 +35,15 @@ def format_time(time_str):
 
 
 def saturate_csv(directory):
+    csv_filename = find_csv_file(directory)
+    with open(directory + csv_filename, mode='r', newline='', encoding='utf-8') as csvfile:
+        rows = list(csv.reader(csvfile))
+
+    headers = rows[0]
+    rows = rows[1:]
+
     try:
         file_path = find_tiff_file(directory)
-        print(f"Обнаружен файл: {file_path}")
-
         with rasterio.open(file_path) as src:
             topleft_lat = src.bounds.top
             topleft_lon = src.bounds.left
@@ -53,22 +54,27 @@ def saturate_csv(directory):
                 if key not in headers:
                     headers.append(key)
 
-            new_csv_file_name = directory + "saturated_" + find_csv_file(directory)
+            new_csv_file_name = directory + "saturated_" + csv_filename
             with open(new_csv_file_name, 'w', newline='', encoding='utf-8') as csvfile:
                 writer = csv.writer(csvfile)
                 writer.writerow(headers)
+
                 for i in range(len(data['date'])):
-                    row = []
+                    try:
+                        row = rows[i]
+                    except IndexError:
+                        break
                     for key in data.keys():
                         if key == "date":
                             row.append(format_time(data['date'][i]))
                             continue
-                        row.append(data.get(key, [''])[i])
+                        try:
+                            row.append(data.get(key, [''])[i])
+                        except IndexError:
+                            row.append(None)
                     writer.writerow(row)
     except FileNotFoundError as fnf_error:
         print(fnf_error)
-    except Exception as e:
-        print(f'Ошибка: {e}')
 
 
 if __name__ == "__main__":
