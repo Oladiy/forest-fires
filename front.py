@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import segmentation_models_pytorch as smp
 import torch.nn.functional as F
 
-PATH_WEIGHTS = "models/best_model.pth"
+PATH_WEIGHTS = "best_model_rgb.pth"
 
 def load_image(image_file):
     image = Image.open(image_file).convert("RGB")
